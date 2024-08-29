@@ -1,28 +1,25 @@
 "use client";
-import React from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { toastErrorCustom } from "@/app/(common)/commonFunc";
+import { signIn } from "@/app/api/auth/auth.api";
+import { SiteLogo } from "@/components/svg";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
-import { signIn } from "next-auth/react";
-import toast from "react-hot-toast";
-import { cn } from "@/lib/utils";
-import Link from "next/link";
-import Image from "next/image";
-import { Icon } from "@iconify/react";
-import { Checkbox } from "@/components/ui/checkbox";
-import googleIcon from "@/public/images/auth/google.png";
-import facebook from "@/public/images/auth/facebook.png";
-import twitter from "@/public/images/auth/twitter.png";
-import GithubIcon from "@/public/images/auth/github.png";
-import { SiteLogo } from "@/components/svg";
 import { useMediaQuery } from "@/hooks/use-media-query";
-
+import { cn } from "@/lib/utils";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Icon } from "@iconify/react";
+import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import React from "react";
+import { useForm } from "react-hook-form";
+import toast from "react-hot-toast";
+import { z } from "zod";
 const schema = z.object({
-  email: z.string().email({ message: "Your email is invalid." }),
+  user: z.string().nonempty({ message: "String cannot be empty" }).refine(value => value.trim().length > 0, {
+    message: "String cannot be whitespace",
+  }),
   password: z.string().min(4),
 });
 const LogInForm = () => {
@@ -40,32 +37,30 @@ const LogInForm = () => {
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm({
+  } = useForm<LoginRequest>({
     resolver: zodResolver(schema),
     mode: "all",
     defaultValues: {
-      email: "dashtail@codeshaper.net",
+      userName: "dashtail@codeshaper.net",
       password: "password",
+      rememberMe: false
     },
   });
-  const [isVisible, setIsVisible] = React.useState(false);
-
-  const toggleVisibility = () => setIsVisible(!isVisible);
   const isDesktop2xl = useMediaQuery("(max-width: 1530px)");
 
-  const onSubmit = (data: any) => {
+  const onSubmit = (data : LoginRequest ) => {
     startTransition(async () => {
-      let response = await signIn("credentials", {
-        email: data.email,
+      let response : Acknowledgement<TokenModel> = await signIn({
+        userName: data.userName,
         password: data.password,
-        redirect: false,
+        rememberMe: false,
       });
-      if (response?.ok) {
+      if (response.isSuccess) {
         toast.success("Login Successful");
         window.location.assign("/dashboard");
         reset();
-      } else if (response?.error) {
-        toast.error(response?.error);
+      } else if (response.errorMessageList.length > 0) {
+        toastErrorCustom(response.errorMessageList);
       }
     });
   };
@@ -84,18 +79,17 @@ const LogInForm = () => {
         <div className="relative">
           <Input
             removeWrapper
-            type="email"
-            id="email"
+            id="userName"
             size={!isDesktop2xl ? "xl" : "lg"}
             placeholder=" "
             disabled={isPending}
-            {...register("email")}
+            {...register("userName")}
             className={cn("peer", {
-              "border-destructive": errors.email,
+              "border-destructive": errors.userName,
             })}
           />
           <Label
-            htmlFor="email"
+            htmlFor="userName"
             className={cn(
               " absolute text-base text-default-600  rounded-t duration-300 transform -translate-y-5 scale-75 top-2 z-10 origin-[0]   bg-background  px-2 peer-focus:px-2 peer-placeholder-shown:scale-100 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:top-1/2 peer-focus:top-2 peer-focus:scale-75  peer-focus:-translate-y-4 rtl:peer-focus:translate-x-1/4 rtl:peer-focus:left-auto start-1",
               {
@@ -103,11 +97,11 @@ const LogInForm = () => {
               }
             )}
           >
-            Email
+            User Name
           </Label>
         </div>
-        {errors.email && (
-          <div className=" text-destructive mt-2">{errors.email.message}</div>
+        {errors.userName && (
+          <div className=" text-destructive mt-2">{errors.userName.message}</div>
         )}
 
         <div className="relative mt-6">
@@ -135,7 +129,7 @@ const LogInForm = () => {
             Password
           </Label>
           <div
-            className="absolute top-1/2 -translate-y-1/2 ltr:right-4 rtl:left-4 cursor-pointer"
+            className="absolute top-1/2 -translate-y-1/2 right-4 cursor-pointer"
             onClick={togglePasswordType}
           >
             {passwordType === "password" ? (
@@ -159,10 +153,11 @@ const LogInForm = () => {
             <Checkbox
               size="sm"
               className="border-default-300 mt-[1px]"
-              id="isRemebered"
+              id="rememberMe"
+              {...register("rememberMe")}
             />
             <Label
-              htmlFor="isRemebered"
+              htmlFor="rememberMe"
               className="text-sm text-default-600 cursor-pointer whitespace-nowrap"
             >
               Remember me
@@ -177,63 +172,10 @@ const LogInForm = () => {
           disabled={isPending}
           size={!isDesktop2xl ? "lg" : "md"}
         >
-          {isPending && <Loader2 className="ltr:mr-2 rtl:ml-2 h-4 w-4 animate-spin" />}
+          {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isPending ? "Loading..." : "Sign In"}
         </Button>
       </form>
-      <div className="2xl:mt-8 mt-6 flex flex-wrap justify-center gap-4">
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          className="rounded-full  border-default-300 hover:bg-background"
-          disabled={isPending}
-          onClick={() =>
-            signIn("google", {
-              callbackUrl: "/dashboard",
-            })
-          }
-        >
-          <Image src={googleIcon} alt="google" className="w-5 h-5" priority={true} />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          className="rounded-full border-default-300 hover:bg-background"
-          disabled={isPending}
-          onClick={() =>
-            signIn("github", {
-              callbackUrl: "/dashboard",
-              redirect: false,
-            })
-          }
-        >
-          <Image src={GithubIcon} alt="google" className="w-5 h-5" priority={true} />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          className="rounded-full  border-default-300 hover:bg-background"
-        >
-          <Image src={facebook} alt="google" className="w-5 h-5" priority={true} />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          className="rounded-full  border-default-300 hover:bg-background"
-        >
-          <Image src={twitter} alt="google" className="w-5 h-5" priority={true} />
-        </Button>
-      </div>
-      <div className="mt-6 text-center text-base text-default-600">
-        Don't have an account?{" "}
-        <Link href="/auth/register3" className="text-primary">
-          Sign Up{" "}
-        </Link>
-      </div>
     </div>
   );
 };
